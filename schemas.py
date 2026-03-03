@@ -11,9 +11,17 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     role: str
+    marks: Optional[float] = 0.0
+    attendance: Optional[float] = 0.0
 
     class Config:
         from_attributes = True
+
+class StudentUpdateMarks(BaseModel):
+    marks: float
+
+class StudentUpdateAttendance(BaseModel):
+    attendance: float
 
 class LoginRequest(BaseModel):
     email: EmailStr

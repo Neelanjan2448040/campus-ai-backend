@@ -1,28 +1,155 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from database import engine, Base, get_db
 import models
 import schemas
 import auth_utils
+from fastapi.middleware.cors import CORSMiddleware
+import os
+import logging
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
+except Exception as e:
+    logger.error(f"Error creating database tables: {e}")
 
-app = FastAPI(title="CampusAI Backend")
+app = FastAPI(
+    title="CampusAI Backend",
+    description="A stable and production-ready API for Campus Management",
+    version="1.0.0"
+)
 
-# We use a custom oauth2 scheme to pick up the token from header
-# For student/admin distinction, we'll use specific dependencies
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+# Global Exception Handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please try again later."},
+    )
 
-@app.get("/")
+# CORS Configuration
+origins = ["*"] # Flexible for Railway/Netlify deployment
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/", tags=["General"])
 async def root():
-    return {"message": "Backend running"}
+    return {"status": "ok", "message": "CampusAI Backend is stable and running"}
 
 # --- Student Routes ---
 
-@app.post("/students/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/students/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED, tags=["Students"])
 def register_student(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # 1. Check if email already exists
+    db_user = db.query(models.Student).filter(models.Student.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # 2. Hash password exactly once
+    hashed_pwd = auth_utils.hash_password(user.password)
+    
+    # 3. Create student (marks and attendance default to 0 in models)
+    new_student = models.Student(
+        name=user.name,
+        email=user.email,
+        password=hashed_pwd
+    )
+    
+    try:
+        db.add(new_student)
+        db.commit()
+        db.refresh(new_student)
+        return new_student
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Could not register student. Email may already exist.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Error saving data to database")
+
+@app.post("/students/login", response_model=schemas.Token, tags=["Students"])
+def login_student(request: schemas.LoginRequest, db: Session = Depends(get_db)):
+    # 1. Fetch user by email
+    student = db.query(models.Student).filter(models.Student.email == request.email).first()
+    
+    # 2. Validate email and password (using pwd_context.verify exactly once)
+    if not student or not auth_utils.verify_password(request.password, student.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # 3. Generate JWT token (1-hour expiry handled in auth_utils)
+    access_token = auth_utils.create_access_token(
+        data={"id": student.id, "role": student.role}
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# --- Admin Routes ---
+
+@app.post("/admins/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED, tags=["Admins"])
+def register_admin(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(models.Admin).filter(models.Admin.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    hashed_pwd = auth_utils.hash_password(user.password)
+    new_admin = models.Admin(
+        name=user.name,
+        email=user.email,
+        password=hashed_pwd
+    )
+    
+    try:
+        db.add(new_admin)
+        db.commit()
+        db.refresh(new_admin)
+        return new_admin
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Admin registration error: {e}")
+        raise HTTPException(status_code=500, detail="Error saving admin to database")
+
+@app.post("/admins/login", response_model=schemas.Token, tags=["Admins"])
+def login_admin(request: schemas.LoginRequest, db: Session = Depends(get_db)):
+    admin = db.query(models.Admin).filter(models.Admin.email == request.email).first()
+    if not admin or not auth_utils.verify_password(request.password, admin.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    access_token = auth_utils.create_access_token(
+        data={"id": admin.id, "role": admin.role}
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# --- Protected Admin Operations ---
+
+@app.get("/admin/student/{student_id}", response_model=schemas.UserResponse, tags=["Admin Operations"])
+def get_student_details(student_id: int, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
+
+@app.post("/admin/add-student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED, tags=["Admin Operations"])
+def admin_add_student(user: schemas.UserCreate, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    # This mirrors student registration but restricted to admins
     db_user = db.query(models.Student).filter(models.Student.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -38,62 +165,35 @@ def register_student(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_student)
     return new_student
 
-@app.post("/students/login", response_model=schemas.Token)
-def login_student(request: schemas.LoginRequest, db: Session = Depends(get_db)):
-    student = db.query(models.Student).filter(models.Student.email == request.email).first()
-    if not student or not auth_utils.verify_password(request.password, student.password):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+@app.put("/admin/update-marks/{student_id}", response_model=schemas.UserResponse, tags=["Admin Operations"])
+def update_marks(student_id: int, request: schemas.StudentUpdateMarks, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
     
-    access_token = auth_utils.create_access_token(
-        data={"id": student.id, "role": student.role}
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    try:
+        student.marks = request.marks
+        db.commit()
+        db.refresh(student)
+        return student
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error updating marks")
 
-@app.get("/student/dashboard")
-def student_dashboard(current_user: dict = Depends(auth_utils.check_role("student"))):
-    return {
-        "message": "Welcome to Student Dashboard",
-        "student_id": current_user["id"],
-        "role": current_user["role"]
-    }
-
-# --- Admin Routes ---
-
-@app.post("/admins/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def register_admin(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(models.Admin).filter(models.Admin.email == user.email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+@app.put("/admin/update-attendance/{student_id}", response_model=schemas.UserResponse, tags=["Admin Operations"])
+def update_attendance(student_id: int, request: schemas.StudentUpdateAttendance, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
     
-    hashed_pwd = auth_utils.hash_password(user.password)
-    new_admin = models.Admin(
-        name=user.name,
-        email=user.email,
-        password=hashed_pwd
-    )
-    db.add(new_admin)
-    db.commit()
-    db.refresh(new_admin)
-    return new_admin
-
-@app.post("/admins/login", response_model=schemas.Token)
-def login_admin(request: schemas.LoginRequest, db: Session = Depends(get_db)):
-    admin = db.query(models.Admin).filter(models.Admin.email == request.email).first()
-    if not admin or not auth_utils.verify_password(request.password, admin.password):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    access_token = auth_utils.create_access_token(
-        data={"id": admin.id, "role": admin.role}
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.get("/admin/dashboard")
-def admin_dashboard(current_user: dict = Depends(auth_utils.check_role("admin"))):
-    return {
-        "message": "Welcome to Admin Dashboard",
-        "admin_id": current_user["id"],
-        "role": current_user["role"]
-    }
+    try:
+        student.attendance = request.attendance
+        db.commit()
+        db.refresh(student)
+        return student
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error updating attendance")
 
 if __name__ == "__main__":
     import uvicorn

@@ -9,8 +9,13 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Handle Railway's mysql:// prefix if present
+if DATABASE_URL and DATABASE_URL.startswith("mysql://"):
+    DATABASE_URL = DATABASE_URL.replace("mysql://", "mysql+pymysql://", 1)
+
 # Create SQLAlchemy engine
 engine = create_engine(DATABASE_URL)
+
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

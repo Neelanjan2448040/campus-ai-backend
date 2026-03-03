@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Float
 from database import Base
 
 class Student(Base):
@@ -9,6 +9,8 @@ class Student(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
     role = Column(String(50), default="student")
+    marks = Column(Float, default=0.0)
+    attendance = Column(Float, default=0.0)
 
 class Admin(Base):
     __tablename__ = "admins"
