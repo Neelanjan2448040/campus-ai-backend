@@ -30,7 +30,29 @@ class LoginRequest(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    user: UserResponse
 
 class TokenData(BaseModel):
     id: Optional[int] = None
     role: Optional[str] = None
+
+class CourseBase(BaseModel):
+    code: str
+    name: str
+    faculty: Optional[str] = ""
+    batch: Optional[str] = ""
+    students: Optional[int] = 0
+    schedule: Optional[str] = ""
+    assignments: Optional[int] = 0
+    tests: Optional[int] = 0
+    dept: Optional[str] = ""
+    credits: Optional[int] = 3
+
+class CourseCreate(CourseBase):
+    pass
+
+class CourseResponse(CourseBase):
+    id: int
+
+    class Config:
+        from_attributes = True

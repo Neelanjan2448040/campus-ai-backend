@@ -22,8 +22,19 @@ logger = logging.getLogger(__name__)
 try:
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created successfully")
+    
+    # Seed default courses if table is empty
+    db = next(get_db())
+    if db.query(models.Course).count() == 0:
+        default_courses = [
+            models.Course(code='CS301', name='Advanced DSA', faculty='Dr. Rajesh Kumar', batch='CSE - 3rd Year', students=64, schedule='Mon, Wed (9:00 AM)', assignments=4, tests=2, credits=4, dept='CSE'),
+            models.Course(code='CS102', name='Programming in C', faculty='Mrs. Soundarya M.', batch='ECE - 1st Year', students=72, schedule='Tue, Thu (11:00 AM)', assignments=2, tests=1, credits=3, dept='ECE')
+        ]
+        db.add_all(default_courses)
+        db.commit()
+        logger.info("Default courses seeded successfully")
 except Exception as e:
-    logger.error(f"Error creating database tables: {e}")
+    logger.error(f"Error initializing database: {e}")
 
 app = FastAPI(
     title="CampusAI Backend",
@@ -100,7 +111,18 @@ def login_student(request: schemas.LoginRequest, db: Session = Depends(get_db)):
     access_token = auth_utils.create_access_token(
         data={"id": student.id, "role": student.role}
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": student
+    }
+
+@app.get("/students/details", response_model=schemas.UserResponse, tags=["Students"])
+def get_student_profile(db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.get_current_user_data)):
+    student = db.query(models.Student).filter(models.Student.id == current_user["id"]).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
 
 # --- Admin Routes ---
 
@@ -136,7 +158,17 @@ def login_admin(request: schemas.LoginRequest, db: Session = Depends(get_db)):
     access_token = auth_utils.create_access_token(
         data={"id": admin.id, "role": admin.role}
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": admin
+    }
+
+@app.post("/leaves/apply", tags=["General"])
+def apply_leave(request: dict, current_user: dict = Depends(auth_utils.get_current_user_data)):
+    # Simulating leave application storage
+    logger.info(f"Leave applied by {current_user['role']} ID: {current_user['id']}: {request}")
+    return {"message": "Leave application submitted successfully"}
 
 # --- Protected Admin Operations ---
 
@@ -146,6 +178,34 @@ def get_student_details(student_id: int, db: Session = Depends(get_db), current_
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
+
+@app.get("/admin/students", response_model=list[schemas.UserResponse], tags=["Admin Operations"])
+def list_students(db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    return db.query(models.Student).all()
+
+# --- Course Routes ---
+
+@app.get("/courses", response_model=list[schemas.CourseResponse], tags=["Courses"])
+def list_courses(db: Session = Depends(get_db)):
+    return db.query(models.Course).all()
+
+@app.post("/courses", response_model=schemas.CourseResponse, tags=["Courses"])
+def add_course(course: schemas.CourseCreate, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    db_course = models.Course(**course.model_dump())
+    db.add(db_course)
+    db.commit()
+    db.refresh(db_course)
+    return db_course
+
+@app.post("/courses/assignment/{course_code}", tags=["Courses"])
+def create_assignment(course_code: str, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
+    course = db.query(models.Course).filter(models.Course.code == course_code).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    course.assignments += 1
+    db.commit()
+    db.refresh(course)
+    return {"message": "Assignment created", "assignments": course.assignments}
 
 @app.post("/admin/add-student", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED, tags=["Admin Operations"])
 def admin_add_student(user: schemas.UserCreate, db: Session = Depends(get_db), current_user: dict = Depends(auth_utils.check_role("admin"))):
