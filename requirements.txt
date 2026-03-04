@@ -9,4 +9,6 @@ pydantic
 pydantic[email]
 python-jose[cryptography]
 python-multipart
+cryptography
+gunicorn
 
