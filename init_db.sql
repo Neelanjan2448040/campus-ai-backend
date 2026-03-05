@@ -29,3 +29,9 @@ CREATE TABLE admins (
     role VARCHAR(50) DEFAULT 'admin',
     INDEX admin_email_idx (email)
 );
+
+-- viewing student table
+select * from students;
+
+-- viewing admins table
+select * from admins;
