@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 from dotenv import load_dotenv
+import chat_router
 
 load_dotenv()
 
@@ -61,6 +62,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(chat_router.router)
 
 @app.get("/", tags=["General"])
 async def root():

@@ -12,3 +12,7 @@ python-multipart
 cryptography
 gunicorn
 
+
+groq
+motor
+pymongo
