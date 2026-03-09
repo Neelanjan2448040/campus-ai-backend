@@ -12,6 +12,7 @@ import os
 import logging
 from dotenv import load_dotenv
 import chat_router
+import random
 
 load_dotenv()
 
@@ -114,10 +115,14 @@ def login_student(request: schemas.LoginRequest, db: Session = Depends(get_db)):
     access_token = auth_utils.create_access_token(
         data={"id": student.id, "role": student.role}
     )
+    # Generate dynamic registration number (CSES followed by 5 random digits)
+    reg_number = f"CSES{random.randint(0, 99999):05d}"
+    
     return {
         "access_token": access_token, 
         "token_type": "bearer",
-        "user": student
+        "user": student,
+        "registration_number": reg_number
     }
 
 @app.get("/students/details", response_model=schemas.UserResponse, tags=["Students"])
@@ -161,10 +166,14 @@ def login_admin(request: schemas.LoginRequest, db: Session = Depends(get_db)):
     access_token = auth_utils.create_access_token(
         data={"id": admin.id, "role": admin.role}
     )
+    # Generate dynamic registration number (ADMIN followed by 5 random digits)
+    reg_number = f"ADMIN{random.randint(0, 99999):05d}"
+    
     return {
         "access_token": access_token, 
         "token_type": "bearer",
-        "user": admin
+        "user": admin,
+        "registration_number": reg_number
     }
 
 @app.post("/leaves/apply", tags=["General"])

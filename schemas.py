@@ -31,6 +31,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
+    registration_number: str
 
 class TokenData(BaseModel):
     id: Optional[int] = None

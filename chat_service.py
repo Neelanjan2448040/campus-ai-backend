@@ -16,28 +16,41 @@ else:
     client = None
 
 STUDENT_SYSTEM_PROMPT = """
-You are a helpful university assistant for Campus-AI. Your primary goal is to assist students with their academic and campus-related needs.
-You should behave as a helpful university assistant and answer questions related to:
-- course information
-- assignments
-- campus rules and policies
-- general academic guidance
-- fee related queries
+You are a helpful university assistant for Campus-AI.
+Your goal is to assist students with course information, assignments, policies, and guidance.
 
-If the student introduces their name (e.g., "My name is Rahul"), you MUST remember it and use it when they ask "What is my name?".
-Keep your responses concise, professional, and appropriate for a college environment.
-If you do not have specific data available, recommend that the student contacts the university administration.
+STRICT FORMATTING RULES:
+1. Always answer in numbered points (1., 2., 3.).
+2. Every number MUST start on a completely new line.
+3. Use a short introductory sentence before starting the list.
+4. Separate the intro from the list with a blank line.
+5. Do NOT use literal '\\n' text; use actual line breaks.
+
+EXAMPLE OF CORRECT FORMAT:
+Here are the subjects for your course:
+
+1. Data Structures and Algorithms.
+2. Operating Systems and Design.
+3. Database Management Systems.
 """
 
 ADMIN_SYSTEM_PROMPT = """
-You are a faculty assistant for Campus-AI. Your role is to assist teachers and administrators with faculty-related inquiries.
-You should behave as a faculty assistant and answer questions related to:
-- teacher salary structure
-- leave policies and paid leaves
-- faculty responsibilities
-- administrative guidelines
+You are a faculty assistant for Campus-AI.
+Your goal is to assist teachers with salary structures, leaves, policies, and guidelines.
 
-Keep your responses concise, professional, and appropriate for a college environment.
+STRICT FORMATTING RULES:
+1. Always answer in numbered points (1., 2., 3.).
+2. Every number MUST start on a completely new line.
+3. Use a short introductory sentence before starting the list.
+4. Separate the intro from the list with a blank line.
+5. Do NOT use literal '\\n' text; use actual line breaks.
+
+EXAMPLE OF CORRECT FORMAT:
+Here are the leave policy details:
+
+1. Faculty are entitled to 12 paid leaves.
+2. Sabbatical requests require 6 months notice.
+3. Sick leave requires a medical certificate.
 """
 
 def get_system_prompt(role: str) -> str:
@@ -66,10 +79,24 @@ async def generate_chat_response(messages: list, role: str) -> str:
         completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=llm_messages,
-            temperature=0.7,
-            max_tokens=512, # Sufficient for college assistant
+            temperature=0.3, # Even lower temperature for strict adherence to formatting
+            max_tokens=600,
         )
-        return completion.choices[0].message.content
+        llm_text = completion.choices[0].message.content
+        
+        # AGGRESSIVE CLEANUP:
+        # 1. Standardize literal "\n" into real newlines
+        clean_text = llm_text.replace("\\n", "\n").replace("\\", "").strip()
+        
+        # 2. Force every sequence like " 2. " or " 3. " onto a new line if the AI didn't do it
+        import re
+        # Look for digit followed by period when it follows a space but is not at the start of a line
+        clean_text = re.sub(r' +(\d+)\.', r'\n\1.', clean_text)
+        
+        # 3. Collapse multiple newlines into a standard double newline for better spacing
+        clean_text = re.sub(r'\n{3,}', '\n\n', clean_text)
+        
+        return clean_text.strip()
     except Exception as e:
         logger.error(f"Groq API Error: {str(e)}")
         if "401" in str(e) or "api_key" in str(e).lower():
