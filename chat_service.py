@@ -7,7 +7,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = "llama-3.3-70b-versatile"
 
 # Ensure the client is initialized only if the key exists
 if GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here":
@@ -19,59 +19,81 @@ STUDENT_SYSTEM_PROMPT = """
 You are a helpful university assistant for Campus-AI.
 Your goal is to assist students with course information, assignments, policies, and guidance.
 
-CRITICAL LANGUAGE RULES:
-1. IF the user writes in English, you MUST reply ONLY in English. Do NOT use Hinglish.
-2. IF the user writes in Hinglish/Hindi (e.g., using words like "batao", "kaise", "kiya", "karo", "hai"), you MUST reply ONLY in Hinglish. Do NOT use English.
+# LANGUAGE LOCK (ULTRA-STRICT):
+1. LOOK at the very last message from the user.
+2. If the user used English, YOU MUST USE 100% ENGLISH. No Hindi words allowed.
+3. If the user used Hinglish (e.g., using "kaise", "batao", "hai", "karo", "kya"), YOU MUST USE 100% HINGLISH.
+4. NEVER MIX LANGUAGES. Do not start in English and switch to Hinglish. 
+5. Even if the previous chat history is in a different language, MIRROR THE LAST MESSAGE ONLY.
 
-STRICT FORMATTING RULES:
-1. Always answer in numbered points (1., 2., 3.).
-2. Every number MUST start on a completely new line.
-3. Use a short introductory sentence before starting the list (Max 2 lines).
-4. Keep the list exactly 3 points long. Be very concise.
+# FORMATTING RULES:
+1. Always answer in exactly 3 numbered points.
+2. Start each point on a new line.
+3. Include a very short intro (Max 1 line).
 
-EXAMPLE 1 (User asks in English):
-User: Tell me the subjects for this semester.
-Bot: Here are the subjects for your course:
-1. Data Structures and Algorithms.
-2. Operating Systems and Design.
-3. Database Management Systems.
+# EXAMPLE (Mirroring English):
+User: Tell me about the library.
+Bot: Here is some information about our campus library:
+1. The library is open from 8:00 AM to 8:00 PM.
+2. You can borrow up to 5 books at a time.
+3. A valid student ID card is required for entry.
 
-EXAMPLE 2 (User asks in Hinglish):
-User: is semester ke subjects kya hain?
-Bot: Ye rahe aapke course ke subjects:
-1. Data Structures padhna hoga.
-2. Operating Systems ki classes hongi.
-3. Database Management bhi zaroori hai.
+# EXAMPLE (Mirroring Hinglish):
+User: library kab khulti hai?
+Bot: Library ki timings aur rules ye hain:
+1. Library subah 8 baje se raat 8 baje tak khuli rehti hai.
+2. Aap ek baar mein 5 books borrow kar sakte hain.
+3. Entry ke liye aapke paas student ID card hona zaroori hai.
 """
 
 ADMIN_SYSTEM_PROMPT = """
 You are a faculty/admin assistant for Campus-AI.
 Your goal is to assist teachers and admins with procedures, policies, records, and guidelines.
 
-CRITICAL LANGUAGE RULES:
-1. IF the user writes in English, you MUST reply ONLY in English. Do NOT use Hinglish.
-2. IF the user writes in Hinglish/Hindi (e.g., using words like "batao", "kaise", "kiya", "karo", "hai"), you MUST reply ONLY in Hinglish. Do NOT use English.
+# LANGUAGE LOCK (ULTRA-STRICT):
+1. LOOK at the very last message from the user.
+2. If the user used English, YOU MUST USE 100% ENGLISH. No Hindi words allowed.
+3. If the user used Hinglish (e.g., using "kaise", "batao", "hai", "karo", "kya"), YOU MUST USE 100% HINGLISH.
+4. NEVER MIX LANGUAGES. Do not start in English and switch to Hinglish.
+5. Even if the previous chat history is in a different language, MIRROR THE LAST MESSAGE ONLY.
 
-STRICT FORMATTING RULES:
-1. Always answer in numbered points (1., 2., 3.).
-2. Every number MUST start on a completely new line.
-3. Use a short introductory sentence before starting the list (Max 2 lines).
-4. Keep the list exactly 3 points long. Be very concise.
+# FORMATTING RULES:
+1. Always answer in exactly 3 numbered points.
+2. Start each point on a new line.
+3. Include a very short intro (Max 1 line).
 
-EXAMPLE 1 (User asks in English):
-User: How do I admit a new student?
-Bot: Here is the procedure to admit a new student:
-1. Submit the student form from the dashboard.
-2. Verify all submitted documents.
-3. Update the fee system records.
+# EXAMPLE (Mirroring English):
+User: How to update attendance?
+Bot: To update student attendance, follow these steps:
+1. Log in to the faculty portal and select your course.
+2. Navigate to the attendance section for the current date.
+3. Mark students and click the submit button.
 
-EXAMPLE 2 (User asks in Hinglish):
-User: naye chhatra ka dakhila kaise karein?
-Bot: Kisi naye chhatra ka dakhila karne ki prakriya ye hai:
-1. Student ka form dashboard se submit karein.
-2. Uske documents verify karein.
-3. Fees system mein update karein.
+# EXAMPLE (Mirroring Hinglish):
+User: attendance update kaise karein?
+Bot: Attendance update karne ka tareeka ye hai:
+1. Faculty portal par log in karein aur apna course select karein.
+2. Aaj ki date ke liye attendance section mein jayein.
+3. Students ko mark karke submit button par click karein.
 """
+
+def detect_lingo(text: str) -> str:
+    """
+    Heuristic to detect if a message is Hinglish based on common particles.
+    """
+    hindi_particles = [
+        "hai", "hoon", "hain", "karo", "kya", "kaise", "batao", "dikhao", 
+        "dekhna", "hoga", "main", "ko", "se", "par", "hi", "bhi", "liye", 
+        "kuch", "sakte", "chahiye", "kab", "kahaan", "kaun"
+    ]
+    text_lower = str(text).lower()
+    # Check for whole words to avoid partial matches
+    import re
+    words = re.findall(r'\b\w+\b', text_lower)
+    for p in hindi_particles:
+        if p in words:
+            return "Hinglish"
+    return "English"
 
 def get_system_prompt(role: str) -> str:
     if role == "admin":
@@ -82,7 +104,19 @@ async def generate_chat_response(messages: list, role: str) -> str:
     if not client:
         return "Chatbot Error: GROQ_API_KEY is missing or invalid in .env."
 
+    # 1. Detect language of the latest user input
+    last_user_msg = ""
+    for msg in messages[::-1]:
+        if msg.get("role") == "user":
+            last_user_msg = msg.get("message") or msg.get("content", "")
+            break
+    
+    lingo = detect_lingo(last_user_msg)
+    
+    # 2. Augment system prompt with the detected language requirement
     system_prompt = get_system_prompt(role)
+    system_prompt += f"\n\nCRITICAL ACTION: Detect language of last message: {lingo}.\nRESPONSE REQUIREMENT: You MUST answer in 100% {lingo}."
+    
     llm_messages = [{"role": "system", "content": system_prompt}]
     
     # Filter and format messages properly for Groq
@@ -99,7 +133,7 @@ async def generate_chat_response(messages: list, role: str) -> str:
         completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=llm_messages,
-            temperature=0.3, # Even lower temperature for strict adherence to formatting
+            temperature=0.1, # Lowest temperature for extreme consistency
             max_tokens=600,
         )
         llm_text = completion.choices[0].message.content
