@@ -15,78 +15,81 @@ A robust, production-ready FastAPI backend for Comprehensive Campus Management, 
 *   **Role-Based Personality**: The chatbot behaves differently for students (Academic Support) and admins (Faculty Assistant).
 *   **Persistent Memory**: Uses **MongoDB** to store and retrieve the last 10 messages for each user, providing a context-aware conversational experience.
 *   **LLM Integration**: Powered by **Groq's Llama-3.1-8b-instant** model for high-speed, intelligent responses.
-*   **Memory Depth**: Remembers user specifics (like names) within the conversation window.
+
+---
 
 ## 🛠️ Technology Stack
 *   **Framework**: FastAPI (Python)
 *   **SQL Database**: MySQL with SQLAlchemy ORM
 *   **NoSQL Database**: MongoDB with Motor (for AI memory)
 *   **AI Engine**: Groq Cloud API
-*   **Security**: JWT (jose), Bcrypt (passlib)
-*   **Environment**: Dotenv for secure configuration
+*   **Containerization**: Docker & Docker Hub
 
-## 📋 API Endpoints
+---
 
-### Authentication & Profiles
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| POST | `/students/register` | Create a new student account |
-| POST | `/students/login` | Student login to receive JWT |
-| GET | `/students/details` | View own student profile (Protected) |
-| POST | `/admins/register` | Create a new admin account |
-| POST | `/admins/login` | Admin login to receive JWT |
+## 🐳 Docker Setup (Recommended)
+The project is fully containerized for easy deployment and consistent environments.
 
-### Admin Operations (Role: Admin Only)
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| GET | `/admin/students` | List all registered students |
-| PUT | `/admin/update-marks/{id}` | Update a student's academic marks |
-| PUT | `/admin/update-attendance/{id}` | Update attendance percentage |
-| POST | `/admin/add-student` | Manually add a new student |
+### 1. Build and Run
+```powershell
+# Build the image
+docker build -t campus-ai-backend .
 
-### Academic & General
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| GET | `/courses` | List all available courses |
-| POST | `/courses` | Register a new course (Admin) |
-| POST | `/leaves/apply` | Submit a leave application |
-| **POST** | **`/chat`** | **AI Assistant (Supports memory & role-context)** |
-
-## ⚙️ Setup & Installation
-
-### 1. Environment Configuration
-Create a `.env` file in the root directory:
-```bash
-DATABASE_URL=mysql+pymysql://user:pass@localhost/campus_ai
-JWT_SECRET=your_jwt_secret_key
-GROQ_API_KEY=your_groq_api_key
-MONGODB_URL=mongodb://localhost:27017/
-MONGODB_DB=campus_ai_chat
+# Run the container (using Docker-specific environment variables)
+docker run -p 8000:8000 --env-file .env.docker campus-ai-backend
 ```
 
-### 2. Installations
+### 2. Docker Hub Deployment
+```powershell
+# Tag the image
+docker tag campus-ai-backend your_username/campus-ai-backend:v1.0
+
+# Push to Docker Hub
+docker push your_username/campus-ai-backend:v1.0
+```
+
+---
+
+## ⚙️ Local Development
+If you prefer running without Docker:
+
+### 1. Requirements
+*   Python 3.10+
+*   MySQL Server
+*   MongoDB Server
+
+### 2. Installation
 ```powershell
 # Activate virtual environment
 .\venv\Scripts\Activate
 
 # Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Database Initialization
-Run the provided SQL script to set up your MySQL schema:
-```sql
-SOURCE init_db.sql;
-```
-
-### 4. Running the Project
-```powershell
+# Run the project
 python main.py
 ```
+
+### 3. Environment Config
+Ensure you have a `.env` file for local development and a `.env.docker` file for Docker development. Use `.env.example` as a template for both.
+
+---
+
+## 📋 API Endpoints Summary
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| POST | `/students/login` | Student login to receive JWT |
+| POST | `/admins/login` | Admin login to receive JWT |
+| POST | `/chat` | **AI Assistant (Supports memory & role-context)** |
+| GET | `/admin/students` | List all registered students (Admin only) |
+| GET | `/courses` | List all available courses |
+
+---
 
 ## 📖 Documentation
 Once the server is running, access the interactive API documentation at:
 👉 **[http://localhost:8000/docs](http://localhost:8000/docs)**
 
 ---
-*Developed with focus on stability and scalability.*
+*Developed with focus on stability, scalability, and modern DevOps practices.*
