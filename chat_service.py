@@ -15,30 +15,27 @@ if GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here":
 else:
     client = None
 
-STUDENT_SYSTEM_PROMPT = """
+STUDENT_BASE_PROMPT = """
 You are a helpful university assistant for Campus-AI.
 Your goal is to assist students with course information, assignments, policies, and guidance.
-
-# LANGUAGE LOCK (ULTRA-STRICT):
-1. LOOK at the very last message from the user.
-2. If the user used English, YOU MUST USE 100% ENGLISH. No Hindi words allowed.
-3. If the user used Hinglish (e.g., using "kaise", "batao", "hai", "karo", "kya"), YOU MUST USE 100% HINGLISH.
-4. NEVER MIX LANGUAGES. Do not start in English and switch to Hinglish. 
-5. Even if the previous chat history is in a different language, MIRROR THE LAST MESSAGE ONLY.
 
 # FORMATTING RULES:
 1. Always answer in exactly 3 numbered points.
 2. Start each point on a new line.
 3. Include a very short intro (Max 1 line).
+"""
 
-# EXAMPLE (Mirroring English):
+STUDENT_ENG_EXAMPLE = """
+# EXAMPLE (English):
 User: Tell me about the library.
 Bot: Here is some information about our campus library:
 1. The library is open from 8:00 AM to 8:00 PM.
 2. You can borrow up to 5 books at a time.
 3. A valid student ID card is required for entry.
+"""
 
-# EXAMPLE (Mirroring Hinglish):
+STUDENT_HIN_EXAMPLE = """
+# EXAMPLE (Hinglish):
 User: library kab khulti hai?
 Bot: Library ki timings aur rules ye hain:
 1. Library subah 8 baje se raat 8 baje tak khuli rehti hai.
@@ -46,30 +43,27 @@ Bot: Library ki timings aur rules ye hain:
 3. Entry ke liye aapke paas student ID card hona zaroori hai.
 """
 
-ADMIN_SYSTEM_PROMPT = """
+ADMIN_BASE_PROMPT = """
 You are a faculty/admin assistant for Campus-AI.
 Your goal is to assist teachers and admins with procedures, policies, records, and guidelines.
-
-# LANGUAGE LOCK (ULTRA-STRICT):
-1. LOOK at the very last message from the user.
-2. If the user used English, YOU MUST USE 100% ENGLISH. No Hindi words allowed.
-3. If the user used Hinglish (e.g., using "kaise", "batao", "hai", "karo", "kya"), YOU MUST USE 100% HINGLISH.
-4. NEVER MIX LANGUAGES. Do not start in English and switch to Hinglish.
-5. Even if the previous chat history is in a different language, MIRROR THE LAST MESSAGE ONLY.
 
 # FORMATTING RULES:
 1. Always answer in exactly 3 numbered points.
 2. Start each point on a new line.
 3. Include a very short intro (Max 1 line).
+"""
 
-# EXAMPLE (Mirroring English):
+ADMIN_ENG_EXAMPLE = """
+# EXAMPLE (English):
 User: How to update attendance?
 Bot: To update student attendance, follow these steps:
 1. Log in to the faculty portal and select your course.
 2. Navigate to the attendance section for the current date.
 3. Mark students and click the submit button.
+"""
 
-# EXAMPLE (Mirroring Hinglish):
+ADMIN_HIN_EXAMPLE = """
+# EXAMPLE (Hinglish):
 User: attendance update kaise karein?
 Bot: Attendance update karne ka tareeka ye hai:
 1. Faculty portal par log in karein aur apna course select karein.
@@ -82,8 +76,8 @@ def detect_lingo(text: str) -> str:
     Heuristic to detect if a message is Hinglish based on common particles.
     """
     hindi_particles = [
-        "hai", "hoon", "hain", "karo", "kya", "kaise", "batao", "dikhao", 
-        "dekhna", "hoga", "main", "ko", "se", "par", "hi", "bhi", "liye", 
+        "hai", "hoon", "hain", "karo", "kyu", "kya", "kaise", "batao", "dikhao", 
+        "dekhna", "hoga", "ko", "se", "bhi", "liye", 
         "kuch", "sakte", "chahiye", "kab", "kahaan", "kaun"
     ]
     text_lower = str(text).lower()
@@ -95,12 +89,17 @@ def detect_lingo(text: str) -> str:
             return "Hinglish"
     return "English"
 
-def get_system_prompt(role: str) -> str:
-    if role == "admin":
-        return ADMIN_SYSTEM_PROMPT
-    return STUDENT_SYSTEM_PROMPT
+def get_system_prompt(role: str, lingo: str, user_name: str) -> str:
+    base = ADMIN_BASE_PROMPT if role == "admin" else STUDENT_BASE_PROMPT
+    
+    # Inject user's identity to establish long-term memory context
+    base += f"\n\n[CRITICAL CONTEXT] The user's name is {user_name}. You MUST remember this. If they ask if you remember them or their name, affirm enthusiastically that you do remember them as {user_name}!"
+    
+    if lingo == "Hinglish":
+        return base + "\n\n" + (ADMIN_HIN_EXAMPLE if role == "admin" else STUDENT_HIN_EXAMPLE)
+    return base + "\n\n" + (ADMIN_ENG_EXAMPLE if role == "admin" else STUDENT_ENG_EXAMPLE)
 
-async def generate_chat_response(messages: list, role: str) -> str:
+async def generate_chat_response(messages: list, role: str, user_name: str = "User") -> str:
     if not client:
         return "Chatbot Error: GROQ_API_KEY is missing or invalid in .env."
 
@@ -113,9 +112,9 @@ async def generate_chat_response(messages: list, role: str) -> str:
     
     lingo = detect_lingo(last_user_msg)
     
-    # 2. Augment system prompt with the detected language requirement
-    system_prompt = get_system_prompt(role)
-    system_prompt += f"\n\nCRITICAL ACTION: Detect language of last message: {lingo}.\nRESPONSE REQUIREMENT: You MUST answer in 100% {lingo}."
+    # 2. Augment system prompt with the detected language requirement & user name
+    system_prompt = get_system_prompt(role, lingo, user_name)
+    system_prompt += f"\n\nCRITICAL ACTION: The user's requested language is {lingo}.\nRESPONSE REQUIREMENT: You MUST answer ENTIRELY in {lingo}. NEVER mix languages."
     
     llm_messages = [{"role": "system", "content": system_prompt}]
     
