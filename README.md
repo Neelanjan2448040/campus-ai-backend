@@ -1,95 +1,70 @@
-# 🎓 Campus-AI Backend
+# Campus-AI Backend
 
-A robust, production-ready FastAPI backend for Comprehensive Campus Management, featuring role-based access control, academic tracking, and an integrated AI Chatbot with persistent memory.
+A robust FastAPI backend for the Campus Management System, featuring role-based access control, academic tracking, and an integrated AI Chatbot with persistent memory.
 
-## 🚀 Key Features
+## Architecture & Tech Stack
 
-### 🏢 Campus Management
-*   **Authentication**: Secure JWT-based authentication for both Students and Administrators.
-*   **Student Portal**: Profile management, grade tracking, and attendance monitoring.
-*   **Admin Dashboard**: Restricted operations to add students, list all users, update academic marks, and manage attendance records.
-*   **Course System**: Dynamic course creation, faculty assignment, and tracking of assignments/tests.
-*   **Leave Management**: Integrated system for faculty and students to apply for leaves.
+- **Framework**: FastAPI (Python)
+- **Database (Relational)**: MySQL via SQLAlchemy ORM
+- **Database (NoSQL)**: MongoDB via Motor (for AI chat memory)
+- **AI Integrations**: Groq Cloud API
+- **Containerization**: Docker
 
-### 🤖 AI Chatbot (Groq & MongoDB)
-*   **Role-Based Personality**: The chatbot behaves differently for students (Academic Support) and admins (Faculty Assistant).
-*   **Persistent Memory**: Uses **MongoDB** to store and retrieve the last 10 messages for each user, providing a context-aware conversational experience.
-*   **LLM Integration**: Powered by **Groq's Llama-3.1-8b-instant** model for high-speed, intelligent responses.
+## Core Subsystems
 
----
+### Campus Administration
+- Secure JWT-based authentication for Students and Administrators.
+- Profile management, grade tracking, and attendance monitoring for students.
+- Restricted operations for administrators to add students, list users, update marks, and manage attendance.
 
-## 🛠️ Technology Stack
-*   **Framework**: FastAPI (Python)
-*   **SQL Database**: MySQL with SQLAlchemy ORM
-*   **NoSQL Database**: MongoDB with Motor (for AI memory)
-*   **AI Engine**: Groq Cloud API
-*   **Containerization**: Docker & Docker Hub
+### Course & Leave Management
+- Dynamic course creation, faculty assignment, and tracking of assignments/tests.
+- Integrated system for faculty and students to apply for leaves.
 
----
+### AI Chatbot Engine
+- Role-based responses configured for Student support vs. Admin support.
+- Utilizes MongoDB to store and retrieve the trailing message history for contextual awareness.
+- Powered by LLMs via Groq infrastructure.
 
-## 🐳 Docker Setup (Recommended)
-The project is fully containerized for easy deployment and consistent environments.
+## Deployment Instructions
 
-### 1. Build and Run
-```powershell
+The backend is fully containerized. It is designed to be run via Docker Compose alongside the frontend, but can also be run in isolation using Docker.
+
+### Running via Docker
+```bash
 # Build the image
 docker build -t campus-ai-backend .
 
-# Run the container (using Docker-specific environment variables)
+# Run the container attached to local environment configuration
 docker run -p 8000:8000 --env-file .env.docker campus-ai-backend
 ```
 
-### 2. Docker Hub Deployment
-```powershell
-# Tag the image
-docker tag campus-ai-backend your_username/campus-ai-backend:v1.0
+## Local Development Setup
 
-# Push to Docker Hub
-docker push your_username/campus-ai-backend:v1.0
-```
+If you need to run the application bare-metal for development:
 
----
+1. **System Requirements**: 
+   - Python 3.10+
+   - Running instances of MySQL and MongoDB.
 
-## ⚙️ Local Development
-If you prefer running without Docker:
+2. **Environment Configuration**:
+   - Create a `.env` file based on `.env.example` in the root directory.
 
-### 1. Requirements
-*   Python 3.10+
-*   MySQL Server
-*   MongoDB Server
+3. **Install and Run**:
+```bash
+# Initialize and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
 
-### 2. Installation
-```powershell
-# Activate virtual environment
-.\venv\Scripts\Activate
-
-# Install dependencies
+# Install requirements
 pip install -r requirements.txt
 
-# Run the project
+# Start the uvicorn development server
 python main.py
 ```
 
-### 3. Environment Config
-Ensure you have a `.env` file for local development and a `.env.docker` file for Docker development. Use `.env.example` as a template for both.
+## Interactive Documentation
 
----
-
-## 📋 API Endpoints Summary
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| POST | `/students/login` | Student login to receive JWT |
-| POST | `/admins/login` | Admin login to receive JWT |
-| POST | `/chat` | **AI Assistant (Supports memory & role-context)** |
-| GET | `/admin/students` | List all registered students (Admin only) |
-| GET | `/courses` | List all available courses |
-
----
-
-## 📖 Documentation
-Once the server is running, access the interactive API documentation at:
-👉 **[http://localhost:8000/docs](http://localhost:8000/docs)**
-
----
-*Developed with focus on stability, scalability, and modern DevOps practices.*
+Once the server is running, FastAPI automatically generated interactive Swagger/OpenAPI documentation.
+Access the API endpoints and test requests at:
+`http://localhost:8000/docs`
